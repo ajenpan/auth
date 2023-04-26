@@ -91,7 +91,7 @@ func main() {
 	}
 }
 
-func createMysqlClient(dsn string) *gorm.DB {
+func CreateMysqlClient(dsn string) *gorm.DB {
 	dbc, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		DisableNestedTransaction: true, //关闭嵌套事务
 		NamingStrategy: schema.NamingStrategy{
@@ -104,7 +104,7 @@ func createMysqlClient(dsn string) *gorm.DB {
 	return dbc
 }
 
-func createSQLiteClient(dsn string) *gorm.DB {
+func CreateSQLiteClient(dsn string) *gorm.DB {
 	dbc, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
@@ -118,8 +118,9 @@ func RealMain(c *cli.Context) error {
 		panic(err)
 	}
 	authHandler := handler.NewAuth(handler.AuthOptions{
-		PK:    pk,
-		DB:    createMysqlClient("root:123456@tcp(localhost:3306)/auth?charset=utf8mb4&parseTime=True&loc=Local"),
+		PK: pk,
+		// DB:    CreateMysqlClient("root:123456@tcp(localhost:3306)/auth?charset=utf8mb4&parseTime=True&loc=Local"),
+		DB:    CreateSQLiteClient("auth.db"),
 		Cache: cache.NewMemory(),
 	})
 
