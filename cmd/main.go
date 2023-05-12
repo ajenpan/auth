@@ -1,15 +1,16 @@
 package main
 
 import (
-	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"reflect"
 
 	"github.com/urfave/cli/v2"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	protobuf "google.golang.org/protobuf/proto"
 	"gorm.io/driver/mysql"
@@ -21,6 +22,7 @@ import (
 	log "auth/log"
 	"auth/proto"
 	"auth/store/cache"
+	"auth/store/models"
 	"auth/utils/calltable"
 	"auth/utils/rsagen"
 	utilSignal "auth/utils/signal"
@@ -36,21 +38,25 @@ var ConfigPath string = ""
 var ListenAddr string = ""
 var PrintConf bool = false
 
-func ReadRSAKey() (*rsa.PrivateKey, error) {
-	const privateFile = "private.pem"
-	const publicFile = "public.pem"
+const PrivateKeyFile = "private.pem"
+const PublicKeyFile = "public.pem"
 
-	raw, err := os.ReadFile(privateFile)
+func ReadRSAKey() ([]byte, []byte, error) {
+	privateRaw, err := os.ReadFile(PrivateKeyFile)
 	if err != nil {
 		privateKey, publicKey, err := rsagen.GenerateRsaPem(2048)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		raw = []byte(privateKey)
-		os.WriteFile(privateFile, []byte(privateKey), 0644)
-		os.WriteFile(publicFile, []byte(publicKey), 0644)
+		privateRaw = []byte(privateKey)
+		os.WriteFile(PrivateKeyFile, []byte(privateKey), 0644)
+		os.WriteFile(PublicKeyFile, []byte(publicKey), 0644)
 	}
-	return rsagen.ParseRsaPrivateKeyFromPem(raw)
+	publicRaw, err := os.ReadFile(PrivateKeyFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return privateRaw, publicRaw, nil
 }
 
 func main() {
@@ -109,25 +115,39 @@ func CreateSQLiteClient(dsn string) *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
+	err = dbc.AutoMigrate(
+		&models.Users{},
+	)
+	if err != nil {
+		panic(err)
+	}
 	return dbc
 }
 
 func RealMain(c *cli.Context) error {
-	pk, err := ReadRSAKey()
+	privateRaw, publicRaw, err := ReadRSAKey()
 	if err != nil {
 		panic(err)
 	}
+	pk, err := rsagen.ParseRsaPrivateKeyFromPem(privateRaw)
+	if err != nil {
+		return err
+	}
+
 	authHandler := handler.NewAuth(handler.AuthOptions{
-		PK: pk,
-		// DB:    CreateMysqlClient("root:123456@tcp(localhost:3306)/auth?charset=utf8mb4&parseTime=True&loc=Local"),
-		DB:    CreateSQLiteClient("auth.db"),
-		Cache: cache.NewMemory(),
+		PK:        pk,
+		PublicKey: publicRaw,
+		DB:        CreateSQLiteClient("auth.db"),
+		Cache:     cache.NewMemory(),
 	})
 
 	authHandler.CT = calltable.ExtractParseGRpcMethod(proto.File_proto_auth_proto.Services(), authHandler)
+
+	ServerGrpc(authHandler, ":20000")
+
 	ServerCallTable(http.DefaultServeMux, authHandler, authHandler.CT)
 
-	fmt.Println("start http server at: ", ListenAddr)
+	fmt.Println("start http server at:", ListenAddr)
 
 	go func() {
 		http.ListenAndServe(ListenAddr, nil)
@@ -159,17 +179,15 @@ func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.Call
 
 	ct.Range(func(key string, method *calltable.Method) bool {
 		pattern := "/" + key
-		fmt.Println("handle: ", pattern)
+
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			raw, err := io.ReadAll(r.Body)
-
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
 			if err != nil {
 				respWithError(w, nil, fmt.Errorf("read body error: %s", err.Error()))
 				return
 			}
 
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			req := reflect.New(method.RequestType).Interface().(protobuf.Message)
 
 			// todo : get marshaler
@@ -206,9 +224,24 @@ func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.Call
 					}
 				}
 			}
-
 			respWithError(w, respData, respErr)
 		})
 		return true
 	})
+}
+
+func ServerGrpc(h *handler.Auth, address string) {
+	grpcs := grpc.NewServer()
+	proto.RegisterAuthServer(grpcs, h)
+	lis, err := net.Listen("tcp", address) // ":20000"
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		defer grpcs.Stop()
+		err = grpcs.Serve(lis)
+		if err != nil {
+			panic(err)
+		}
+	}()
 }

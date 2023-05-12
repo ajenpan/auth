@@ -18,11 +18,14 @@ import (
 	"auth/utils/calltable"
 )
 
+var RegUname = regexp.MustCompile(`^[a-zA-Z0-9_]{4,16}$`)
+
 type AuthOptions struct {
-	PK    *rsa.PrivateKey
-	DB    *gorm.DB
-	Cache cache.AuthCache
-	CT    *calltable.CallTable
+	PK        *rsa.PrivateKey
+	PublicKey []byte
+	DB        *gorm.DB
+	Cache     cache.AuthCache
+	CT        *calltable.CallTable
 }
 
 func NewAuth(opts AuthOptions) *Auth {
@@ -34,13 +37,13 @@ func NewAuth(opts AuthOptions) *Auth {
 
 type Auth struct {
 	AuthOptions
+
+	proto.UnimplementedAuthServer
 }
 
 func (*Auth) Captcha(ctx context.Context, in *proto.CaptchaRequest) (*proto.CaptchaResponse, error) {
 	return &proto.CaptchaResponse{}, nil
 }
-
-var RegUname = regexp.MustCompile(`^[a-zA-Z0-9_]{4,16}$`)
 
 func (h *Auth) Login(ctx context.Context, in *proto.LoginRequest) (*proto.LoginResponse, error) {
 	out := &proto.LoginResponse{}
@@ -111,7 +114,7 @@ func (h *Auth) Login(ctx context.Context, in *proto.LoginRequest) (*proto.LoginR
 }
 
 func (h *Auth) Logout(ctx context.Context, in *proto.LogoutRequest) (*proto.LogoutResponse, error) {
-	//TODO
+
 	return nil, nil
 }
 
@@ -121,17 +124,30 @@ func (*Auth) RefreshToken(ctx context.Context, in *proto.RefreshTokenRequest) (*
 }
 
 func (h *Auth) UserInfo(ctx context.Context, in *proto.UserInfoRequest) (*proto.UserInfoResponse, error) {
-	user := h.Cache.FetchUser(ctx, in.Uid)
-	if user == nil {
-		//todo, find user from db
-		return nil, fmt.Errorf("user no found")
+	user := &models.Users{
+		UID: in.Uid,
 	}
+	uc := h.Cache.FetchUser(ctx, in.Uid)
+	if uc != nil {
+		user = uc.User
+	} else {
+		res := h.DB.Limit(1).Find(user, user)
+		if res.Error != nil {
+			return nil, fmt.Errorf("server internal error: %v", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return nil, fmt.Errorf("user no found")
+		}
+		//TODO:
+		// h.Cache.StoreUser(ctx, &cache.AuthCacheInfo{User: user}, time.Hour)
+	}
+
 	out := &proto.UserInfoResponse{}
 	out.Info = &proto.UserInfo{
-		Uid:     user.User.UID,
-		Uname:   user.User.Uname,
-		Stat:    int32(user.User.Stat),
-		Created: user.User.CreateAt.Unix(),
+		Uid:     user.UID,
+		Uname:   user.Uname,
+		Stat:    int32(user.Stat),
+		Created: user.CreateAt.Unix(),
 	}
 	return out, nil
 }
@@ -169,4 +185,16 @@ func (h *Auth) Register(ctx context.Context, in *proto.RegisterRequest) (*proto.
 	}
 
 	return &proto.RegisterResponse{Msg: "ok"}, nil
+}
+
+func (h *Auth) PublicKeys(ctx context.Context, in *proto.PublicKeysRequest) (*proto.PublicKeysResponse, error) {
+	return &proto.PublicKeysResponse{Keys: h.PublicKey}, nil
+}
+func (h *Auth) AnonymousLogin(ctx context.Context, in *proto.AnonymousLoginRequest) (*proto.LoginResponse, error) {
+	return nil, nil
+}
+
+func (h *Auth) ModifyPasswd(ctx context.Context, in *proto.ModifyPasswdRequest) (*proto.ModifyPasswdResponse, error) {
+	//TODO:
+	return nil, nil
 }

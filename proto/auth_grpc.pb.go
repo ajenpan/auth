@@ -30,6 +30,7 @@ type AuthClient interface {
 	UserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfoResponse, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	ModifyPasswd(ctx context.Context, in *ModifyPasswdRequest, opts ...grpc.CallOption) (*ModifyPasswdResponse, error)
+	PublicKeys(ctx context.Context, in *PublicKeysRequest, opts ...grpc.CallOption) (*PublicKeysResponse, error)
 }
 
 type authClient struct {
@@ -112,6 +113,15 @@ func (c *authClient) ModifyPasswd(ctx context.Context, in *ModifyPasswdRequest, 
 	return out, nil
 }
 
+func (c *authClient) PublicKeys(ctx context.Context, in *PublicKeysRequest, opts ...grpc.CallOption) (*PublicKeysResponse, error) {
+	out := new(PublicKeysResponse)
+	err := c.cc.Invoke(ctx, "/auth.Auth/PublicKeys", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServer is the server API for Auth service.
 // All implementations must embed UnimplementedAuthServer
 // for forward compatibility
@@ -124,6 +134,7 @@ type AuthServer interface {
 	UserInfo(context.Context, *UserInfoRequest) (*UserInfoResponse, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	ModifyPasswd(context.Context, *ModifyPasswdRequest) (*ModifyPasswdResponse, error)
+	PublicKeys(context.Context, *PublicKeysRequest) (*PublicKeysResponse, error)
 	mustEmbedUnimplementedAuthServer()
 }
 
@@ -154,6 +165,9 @@ func (UnimplementedAuthServer) Register(context.Context, *RegisterRequest) (*Reg
 }
 func (UnimplementedAuthServer) ModifyPasswd(context.Context, *ModifyPasswdRequest) (*ModifyPasswdResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ModifyPasswd not implemented")
+}
+func (UnimplementedAuthServer) PublicKeys(context.Context, *PublicKeysRequest) (*PublicKeysResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PublicKeys not implemented")
 }
 func (UnimplementedAuthServer) mustEmbedUnimplementedAuthServer() {}
 
@@ -312,6 +326,24 @@ func _Auth_ModifyPasswd_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Auth_PublicKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublicKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServer).PublicKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/auth.Auth/PublicKeys",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServer).PublicKeys(ctx, req.(*PublicKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Auth_ServiceDesc is the grpc.ServiceDesc for Auth service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -350,6 +382,10 @@ var Auth_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ModifyPasswd",
 			Handler:    _Auth_ModifyPasswd_Handler,
+		},
+		{
+			MethodName: "PublicKeys",
+			Handler:    _Auth_PublicKeys_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

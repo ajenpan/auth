@@ -13,6 +13,7 @@ service Auth {
   rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {}
   rpc Register(RegisterRequest) returns (RegisterResponse) {}
   rpc ModifyPasswd(ModifyPasswdRequest) returns (ModifyPasswdResponse) {}
+  rpc PublicKeys(PublicKeysRequest) returns (PublicKeysResponse) {}
 }
 
 message CaptchaRequest {
@@ -108,4 +109,9 @@ message ResetPasswdResponse {}
 
 message AnonymousLoginRequest {
   string identify_code = 1;
+}
+
+message PublicKeysRequest {}
+message PublicKeysResponse {
+  bytes keys = 1;
 }

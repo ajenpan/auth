@@ -1,0 +1,7 @@
+---
+Language: Proto
+BasedOnStyle: LLVM
+ColumnLimit: 0
+AllowShortBlocksOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+ReflowComments: false
