@@ -4,13 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"reflect"
 
 	"github.com/urfave/cli/v2"
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	protobuf "google.golang.org/protobuf/proto"
 	"gorm.io/driver/mysql"
@@ -52,7 +50,7 @@ func ReadRSAKey() ([]byte, []byte, error) {
 		os.WriteFile(PrivateKeyFile, []byte(privateKey), 0644)
 		os.WriteFile(PublicKeyFile, []byte(publicKey), 0644)
 	}
-	publicRaw, err := os.ReadFile(PrivateKeyFile)
+	publicRaw, err := os.ReadFile(PublicKeyFile)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,7 +97,7 @@ func main() {
 
 func CreateMysqlClient(dsn string) *gorm.DB {
 	dbc, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		DisableNestedTransaction: true, //关闭嵌套事务
+		DisableNestedTransaction: true,
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
@@ -143,8 +141,6 @@ func RealMain(c *cli.Context) error {
 
 	authHandler.CT = calltable.ExtractParseGRpcMethod(proto.File_proto_auth_proto.Services(), authHandler)
 
-	ServerGrpc(authHandler, ":20000")
-
 	ServerCallTable(http.DefaultServeMux, authHandler, authHandler.CT)
 
 	fmt.Println("start http server at:", ListenAddr)
@@ -156,6 +152,12 @@ func RealMain(c *cli.Context) error {
 	signal := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", signal.String())
 	return nil
+}
+
+func AuthMiddleWrap(handler interface{}) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+	}
 }
 
 func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.CallTable) {
@@ -180,7 +182,9 @@ func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.Call
 	ct.Range(func(key string, method *calltable.Method) bool {
 		pattern := "/" + key
 
-		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("register http method:", pattern)
+
+		cb := func(w http.ResponseWriter, r *http.Request) {
 			raw, err := io.ReadAll(r.Body)
 			if err != nil {
 				respWithError(w, nil, fmt.Errorf("read body error: %s", err.Error()))
@@ -225,23 +229,10 @@ func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.Call
 				}
 			}
 			respWithError(w, respData, respErr)
-		})
+		}
+
+		mux.HandleFunc(pattern, cb)
+
 		return true
 	})
-}
-
-func ServerGrpc(h *handler.Auth, address string) {
-	grpcs := grpc.NewServer()
-	proto.RegisterAuthServer(grpcs, h)
-	lis, err := net.Listen("tcp", address) // ":20000"
-	if err != nil {
-		panic(err)
-	}
-	go func() {
-		defer grpcs.Stop()
-		err = grpcs.Serve(lis)
-		if err != nil {
-			panic(err)
-		}
-	}()
 }
