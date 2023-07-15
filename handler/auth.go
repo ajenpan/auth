@@ -190,6 +190,7 @@ func (h *Auth) Register(ctx context.Context, in *proto.RegisterRequest) (*proto.
 func (h *Auth) PublicKeys(ctx context.Context, in *proto.PublicKeysRequest) (*proto.PublicKeysResponse, error) {
 	return &proto.PublicKeysResponse{Keys: h.PublicKey}, nil
 }
+
 func (h *Auth) AnonymousLogin(ctx context.Context, in *proto.AnonymousLoginRequest) (*proto.LoginResponse, error) {
 	return nil, nil
 }
