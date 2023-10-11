@@ -18,4 +18,4 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `UQE_uname` (`uname`)
 ) ENGINE = InnoDB AUTO_INCREMENT = 100000 DEFAULT CHARSET = utf8mb4;
 
-insert into users (uname,passwd,nickname) values ('test','123456','test');
+-- insert into users (uname,passwd,nickname) values ('test','123456','test');

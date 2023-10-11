@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -78,7 +79,7 @@ func main() {
 		}, &cli.StringFlag{
 			Name:        "listen",
 			Aliases:     []string{"l"},
-			Value:       ":30020",
+			Value:       ":10080",
 			Destination: &ListenAddr,
 		}, &cli.BoolFlag{
 			Name:        "print-config",
@@ -139,9 +140,26 @@ func RealMain(c *cli.Context) error {
 		Cache:     cache.NewMemory(),
 	})
 
-	authHandler.CT = calltable.ExtractParseGRpcMethod(proto.File_proto_auth_proto.Services(), authHandler)
+	ct := calltable.ExtractParseGRpcMethod(proto.File_proto_auth_proto.Services(), authHandler)
 
-	ServerCallTable(http.DefaultServeMux, authHandler, authHandler.CT)
+	newMethod := func(i interface{}) *calltable.Method {
+		funcType := reflect.TypeOf(i)
+		funcValue := reflect.ValueOf(i)
+		return &calltable.Method{
+			FuncValue:    funcValue,
+			FuncType:     funcType,
+			Style:        1,
+			RequestType:  funcType.In(1).Elem(),
+			ResponseType: funcType.Out(0).Elem(),
+		}
+	}
+
+	ct.Add("Captcha", newMethod(authHandler.Captcha))
+
+	method := newMethod(authHandler.Captcha)
+	method.Call(context.Background(), &proto.CaptchaRequest{})
+
+	ServerCallTable(http.DefaultServeMux, authHandler, ct)
 
 	fmt.Println("start http server at:", ListenAddr)
 
@@ -194,7 +212,6 @@ func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.Call
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			req := reflect.New(method.RequestType).Interface().(protobuf.Message)
 
-			// todo : get marshaler
 			unmarshal := &protojson.UnmarshalOptions{}
 			if err := unmarshal.Unmarshal(raw, req); err != nil {
 				respWithError(w, nil, fmt.Errorf("unmarshal request error: %s", err.Error()))
@@ -232,7 +249,6 @@ func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.Call
 		}
 
 		mux.HandleFunc(pattern, cb)
-
 		return true
 	})
 }

@@ -3,6 +3,7 @@ syntax = "proto3";
 package auth;
 
 option go_package = "./proto;proto";
+option csharp_namespace = "Proto.Auth";
 
 service Auth {
   rpc Captcha(CaptchaRequest) returns (CaptchaResponse) {}
@@ -47,7 +48,7 @@ message LoginRequest {
 }
 
 message LoginResponse {
-  enum Flag {
+  enum ErrorCode {
     SUCCESS = 0;
     FAIL = 1;
     CAPTCHA_ERROR = 2;
@@ -59,8 +60,8 @@ message LoginResponse {
   string assess_token = 1;
   string refresh_token = 2;
   UserInfo user_info = 3;
-  Flag flag = 4;
-  string msg = 5;
+  ErrorCode errcode = 4;
+  string errmsg = 5;
 }
 
 message LogoutRequest {}
@@ -84,7 +85,7 @@ message RegisterRequest {
   string nickname = 3;
   string email = 4;
 
-  // CaptchaVerify captcha_verify = 5;
+  CaptchaVerify captcha_verify = 5;
 }
 
 message RegisterResponse {

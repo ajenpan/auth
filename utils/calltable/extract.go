@@ -48,14 +48,14 @@ func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *
 			if method.Type.Out(1) != errType {
 				continue
 			}
-			epn := strings.Join([]string{svrName, rpcMethodName}, EndpointSplit)
+			epn := strings.Join([]string{svrName, rpcMethodName}, "/")
 			reqType := method.Type.In(2).Elem()
 			respType := method.Type.Out(0).Elem()
 
 			m := &Method{
-				Imp:          method,
+				FuncValue:    method.Func,
+				FuncType:     method.Type,
 				Style:        StyleGRpc,
-				H:            h,
 				RequestType:  reqType,
 				ResponseType: respType,
 			}
@@ -96,8 +96,8 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 		}
 
 		m := &Method{
-			H:           h,
-			Imp:         method,
+			FuncValue:   method.Func,
+			FuncType:    method.Type,
 			Style:       StyleAsync,
 			RequestType: reqMsgType.Elem(),
 		}

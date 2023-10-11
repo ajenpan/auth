@@ -10,12 +10,11 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"auth/common"
+	"auth/claims"
 	log "auth/log"
 	"auth/proto"
 	"auth/store/cache"
 	"auth/store/models"
-	"auth/utils/calltable"
 )
 
 var RegUname = regexp.MustCompile(`^[a-zA-Z0-9_]{4,16}$`)
@@ -25,7 +24,6 @@ type AuthOptions struct {
 	PublicKey []byte
 	DB        *gorm.DB
 	Cache     cache.AuthCache
-	CT        *calltable.CallTable
 }
 
 func NewAuth(opts AuthOptions) *Auth {
@@ -37,8 +35,6 @@ func NewAuth(opts AuthOptions) *Auth {
 
 type Auth struct {
 	AuthOptions
-
-	proto.UnimplementedAuthServer
 }
 
 func (*Auth) Captcha(ctx context.Context, in *proto.CaptchaRequest) (*proto.CaptchaResponse, error) {
@@ -49,14 +45,14 @@ func (h *Auth) Login(ctx context.Context, in *proto.LoginRequest) (*proto.LoginR
 	out := &proto.LoginResponse{}
 
 	if len(in.Uname) < 4 {
-		out.Flag = proto.LoginResponse_UNAME_ERROR
-		out.Msg = "please input right uname"
+		out.Errcode = proto.LoginResponse_UNAME_ERROR
+		out.Errmsg = "please input right uname"
 		return out, nil
 	}
 
 	if len(in.Passwd) < 6 {
-		out.Flag = proto.LoginResponse_PASSWD_ERROR
-		out.Msg = "passwd is required"
+		out.Errcode = proto.LoginResponse_PASSWD_ERROR
+		out.Errmsg = "passwd is required"
 		return out, nil
 	}
 
@@ -66,28 +62,28 @@ func (h *Auth) Login(ctx context.Context, in *proto.LoginRequest) (*proto.LoginR
 
 	res := h.DB.Limit(1).Find(user, user)
 	if err := res.Error; err != nil {
-		out.Flag = proto.LoginResponse_FAIL
-		out.Msg = "user not found"
+		out.Errcode = proto.LoginResponse_FAIL
+		out.Errmsg = "user not found"
 		return nil, fmt.Errorf("server internal error")
 	}
 
 	if res.RowsAffected == 0 {
-		out.Flag = proto.LoginResponse_UNAME_ERROR
-		out.Msg = "user not exist"
+		out.Errcode = proto.LoginResponse_UNAME_ERROR
+		out.Errmsg = "user not exist"
 		return out, nil
 	}
 
 	if user.Passwd != in.Passwd {
-		out.Flag = proto.LoginResponse_PASSWD_ERROR
+		out.Errcode = proto.LoginResponse_PASSWD_ERROR
 		return out, nil
 	}
 
 	if user.Stat != 0 {
-		out.Flag = proto.LoginResponse_STAT_ERROR
+		out.Errcode = proto.LoginResponse_STAT_ERROR
 		return out, nil
 	}
 
-	assess, err := common.GenerateToken(h.PK, user.UID, user.Uname)
+	assess, err := claims.GenerateToken(h.PK, user.UID, user.Uname, "user")
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +110,6 @@ func (h *Auth) Login(ctx context.Context, in *proto.LoginRequest) (*proto.LoginR
 }
 
 func (h *Auth) Logout(ctx context.Context, in *proto.LogoutRequest) (*proto.LogoutResponse, error) {
-
 	return nil, nil
 }
 
