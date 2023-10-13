@@ -24,7 +24,6 @@ import (
 	"auth/store/models"
 	"auth/utils/calltable"
 	"auth/utils/rsagen"
-	utilSignal "auth/utils/signal"
 )
 
 var Version string = "unknown"
@@ -136,8 +135,8 @@ func RealMain(c *cli.Context) error {
 	authHandler := handler.NewAuth(handler.AuthOptions{
 		PK:        pk,
 		PublicKey: publicRaw,
-		DB:        CreateSQLiteClient("auth.db"),
-		Cache:     cache.NewMemory(),
+		// DB:        CreateSQLiteClient("auth.db"),
+		Cache: cache.NewMemory(),
 	})
 
 	ct := calltable.ExtractParseGRpcMethod(proto.File_proto_auth_proto.Services(), authHandler)
@@ -163,13 +162,11 @@ func RealMain(c *cli.Context) error {
 
 	fmt.Println("start http server at:", ListenAddr)
 
-	go func() {
-		http.ListenAndServe(ListenAddr, nil)
-	}()
+	err = http.ListenAndServe(ListenAddr, nil)
 
-	signal := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", signal.String())
-	return nil
+	// signal := utilSignal.WaitShutdown()
+	// log.Infof("recv signal: %v", signal.String())
+	return err
 }
 
 func AuthMiddleWrap(handler interface{}) func(http.ResponseWriter, *http.Request) {
@@ -179,22 +176,28 @@ func AuthMiddleWrap(handler interface{}) func(http.ResponseWriter, *http.Request
 }
 
 func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.CallTable) {
-	respWithError := func(w http.ResponseWriter, data interface{}, err error) {
-		type HttpRespType struct {
-			Data    interface{} `json:"data"`
-			Code    int         `json:"code"`
-			Message string      `json:"message"`
-		}
-		respWrap := &HttpRespType{
-			Data:    data,
-			Message: "ok",
-		}
+	respWithError := func(w http.ResponseWriter, data json.RawMessage, err error) {
+		// type HttpRespType struct {
+		// 	Data    interface{} `json:"data"`
+		// 	Code    int         `json:"code"`
+		// 	Message string      `json:"message"`
+		// }
+		// respWrap := &HttpRespType{
+		// 	Data:    data,
+		// 	Message: "ok",
+		// }
+		// if err != nil {
+		// 	respWrap.Code = -1
+		// 	respWrap.Message = err.Error()
+		// }
+		// raw, _ := json.Marshal(respWrap)
 		if err != nil {
-			respWrap.Code = -1
-			respWrap.Message = err.Error()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		raw, _ := json.Marshal(respWrap)
-		w.Write(raw)
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Write(data)
 	}
 
 	ct.Range(func(key string, method *calltable.Method) bool {
@@ -209,7 +212,6 @@ func ServerCallTable(mux *http.ServeMux, handler interface{}, ct *calltable.Call
 				return
 			}
 
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			req := reflect.New(method.RequestType).Interface().(protobuf.Message)
 
 			unmarshal := &protojson.UnmarshalOptions{}

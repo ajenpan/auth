@@ -41,6 +41,8 @@ func (*Auth) Captcha(ctx context.Context, in *proto.CaptchaRequest) (*proto.Capt
 	return &proto.CaptchaResponse{}, nil
 }
 
+var uidindex int64 = 0
+
 func (h *Auth) Login(ctx context.Context, in *proto.LoginRequest) (*proto.LoginResponse, error) {
 	out := &proto.LoginResponse{}
 
@@ -56,27 +58,33 @@ func (h *Auth) Login(ctx context.Context, in *proto.LoginRequest) (*proto.LoginR
 		return out, nil
 	}
 
+	uidindex++
+	if uidindex < 0 {
+		uidindex = 1
+	}
+
 	user := &models.Users{
 		Uname: in.Uname,
+		UID:   uidindex,
 	}
 
-	res := h.DB.Limit(1).Find(user, user)
-	if err := res.Error; err != nil {
-		out.Errcode = proto.LoginResponse_FAIL
-		out.Errmsg = "user not found"
-		return nil, fmt.Errorf("server internal error")
-	}
-
-	if res.RowsAffected == 0 {
-		out.Errcode = proto.LoginResponse_UNAME_ERROR
-		out.Errmsg = "user not exist"
-		return out, nil
-	}
-
-	if user.Passwd != in.Passwd {
-		out.Errcode = proto.LoginResponse_PASSWD_ERROR
-		return out, nil
-	}
+	//res := h.DB.Limit(1).Find(user, user)
+	//if err := res.Error; err != nil {
+	//	out.Errcode = proto.LoginResponse_FAIL
+	//	out.Errmsg = "user not found"
+	//	return nil, fmt.Errorf("server internal error")
+	//}
+	//
+	//if res.RowsAffected == 0 {
+	//	out.Errcode = proto.LoginResponse_UNAME_ERROR
+	//	out.Errmsg = "user not exist"
+	//	return out, nil
+	//}
+	//
+	//if user.Passwd != in.Passwd {
+	//	out.Errcode = proto.LoginResponse_PASSWD_ERROR
+	//	return out, nil
+	//}
 
 	if user.Stat != 0 {
 		out.Errcode = proto.LoginResponse_STAT_ERROR
